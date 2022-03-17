@@ -1,0 +1,49 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: train-canary
+spec:
+  type: NodePort
+  selector:
+    app: train-canary
+    track: canary
+  ports:
+  - protocol: TCP
+    port: 8080
+    nodePort: 30100
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: train-canary
+  labels:
+    app: train-canary
+spec:
+  replicas: $CANARY_REPLICAS
+  selector:
+    matchLabels:
+      app: train-canary
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: train-canary
+        track: canary
+    spec:
+      containers:
+      - name: train-canary
+        image: $DOCKER_IMAGE_NAME:$BUILD_NUMBER
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          timeoutSeconds: 1
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 200m

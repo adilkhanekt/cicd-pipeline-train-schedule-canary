@@ -1,53 +1,46 @@
 pipeline {
     agent any
     environment {
-        //be sure to replace "willbla" with your own Docker Hub username
-        DOCKER_IMAGE_NAME = "willbla/train-schedule"
+        //Simplified pipeline to test deploying docker image to Kubernetes cluster using Jenkins
+        DOCKER_IMAGE_NAME = "adilkhanekt/train_schedule_node_js"
     }
     stages {
-        stage('Build') {
-            steps {
-                echo 'Running build automation'
-                sh './gradlew build --no-daemon'
-                archiveArtifacts artifacts: 'dist/trainSchedule.zip'
-            }
-        }
-        stage('Build Docker Image') {
+        stage('CanaryDeploy') {
             when {
                 branch 'master'
             }
-            steps {
-                script {
-                    app = docker.build(DOCKER_IMAGE_NAME)
-                    app.inside {
-                        sh 'echo Hello, World!'
-                    }
-                }
-            }
-        }
-        stage('Push Docker Image') {
-            when {
-                branch 'master'
+            environment {
+                CANARY_REPLICAS = 1
             }
             steps {
-                script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker_hub_login') {
-                        app.push("${env.BUILD_NUMBER}")
-                        app.push("latest")
-                    }
-                }
+                kubernetesDeploy(
+                    kubeconfigId: 'kube_creds',
+                    configs: 'canary_train_schedule_instance.yaml',
+                    enableConfigSubstitution: true
+                )
             }
         }
+    }
+    stages {
         stage('DeployToProduction') {
             when {
                 branch 'master'
             }
-            steps {
+            environment {
+                CANARY_REPLICAS = 0
+            }
+            steps 
+            {
                 input 'Deploy to Production?'
                 milestone(1)
                 kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube.yml',
+                    kubeconfigId: 'kube_creds',
+                    configs: 'canary_train_schedule_instance.yaml',
+                    enableConfigSubstitution: true
+                )
+                kubernetesDeploy(
+                    kubeconfigId: 'kube_creds',
+                    configs: 'stable_train_schedule_instance.yaml',
                     enableConfigSubstitution: true
                 )
             }
